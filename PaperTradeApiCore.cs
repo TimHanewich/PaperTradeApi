@@ -10,12 +10,12 @@ using Newtonsoft.Json;
 using Yahoo.Finance;
 using System.Net.Http;
 using System.Net;
-
+using System.Text;
 namespace PaperTradeApi
 {
     public static class PaperTradeApiCore
     {
-        private const int Version = 2;
+        private const int Version = 3;
 
         [FunctionName("StockSummaryData")]
         public async static Task<HttpResponseMessage> GetStockSummaryData([HttpTrigger(AuthorizationLevel.Anonymous, "get")] HttpRequest req, ILogger log)
@@ -42,7 +42,7 @@ namespace PaperTradeApi
                 log.LogInformation("Returning");
 
                 HttpResponseMessage hrm = new HttpResponseMessage(HttpStatusCode.OK);
-                hrm.Content = new StringContent(json);
+                hrm.Content = new StringContent(json, Encoding.UTF8, "application/json");
                 return hrm;
             }
             catch (Exception e)
