@@ -58,6 +58,7 @@ namespace PaperTradeApi
             }
         }
 
+        //Depends on the "StockSummaryData" function (the "StockSummaryData" funtion must already be uploaded to the Azu Function).
         [FunctionName("MultipleStockSummaryData")]
         public async static Task<HttpResponseMessage> GetMultipleStockSummaryData([HttpTrigger(AuthorizationLevel.Anonymous, "post")] HttpRequest req, ILogger log)
         {
@@ -125,6 +126,45 @@ namespace PaperTradeApi
             HttpResponseMessage rhrm = new HttpResponseMessage(HttpStatusCode.OK);
             rhrm.Content = new StringContent(as_json, Encoding.UTF8, "application/json");
             return rhrm;
+        }
+
+        [FunctionName("StockStatisticalData")]
+        public async static Task<HttpResponseMessage> GetStockStatisticalData([HttpTrigger(AuthorizationLevel.Anonymous, "get")] HttpRequest req, ILogger log)
+        {
+            log.LogInformation("New request received");
+            string symbol = req.Query["symbol"];
+            if (symbol == null || symbol == "")
+            {
+                log.LogInformation("Parameter 'symbol' not present as part of request. Ending.");
+                HttpResponseMessage hrm = new HttpResponseMessage(HttpStatusCode.BadRequest);
+                hrm.Content = new StringContent("Fatal failure. Parameter 'symbol' not provided. You must provide a stock symbol to return data for.");
+                return hrm;
+            }
+            symbol = symbol.Trim().ToUpper();
+            log.LogInformation("Symbol requested: '" + symbol + "'");
+
+            //Download data
+            EquityStatisticalData ToReturn = null;
+            try
+            {
+                log.LogInformation("Attemping to download statistical data for '" + symbol + "'.");
+                ToReturn = await EquityStatisticalData.CreateAsync(symbol.Trim().ToUpper());
+            }
+            catch
+            {
+                log.LogInformation("Error while downloading statistical data for stock '" + symbol + "'.");
+                HttpResponseMessage hrm = new HttpResponseMessage(HttpStatusCode.InternalServerError);
+                hrm.Content = new StringContent("Fatal failure. Unable to download statistical data for stock with symbol '" + symbol + "'.");
+                return hrm;
+            }
+
+            //Return it
+            string json = JsonConvert.SerializeObject(ToReturn);
+            HttpResponseMessage fhrm = new HttpResponseMessage(HttpStatusCode.OK);
+            fhrm.Content = new StringContent(json, Encoding.UTF8, "application/json");
+            return fhrm;
+
+
         }
 
     }
