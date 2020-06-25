@@ -167,5 +167,76 @@ namespace PaperTradeApi
 
         }
 
+        //Depends on the "StockStatisticalData" function (the "StockStatisticalData" funtion must already be uploaded to the Azu Function).
+        [FunctionName("MultipleStockStatisticalData")]
+        public async static Task<HttpResponseMessage> GetMultipleStockStatisticalData([HttpTrigger(AuthorizationLevel.Anonymous, "post")] HttpRequest req, ILogger log)
+        {
+            StreamReader sr = new StreamReader(req.Body);
+            string content = await sr.ReadToEndAsync();
+
+            //Check for blank
+            if (content == null || content == "")
+            {
+                HttpResponseMessage hrm = new HttpResponseMessage(HttpStatusCode.BadRequest);
+                hrm.Content = new StringContent("Your request body was blank. Please include a body of an array of strings (stock symbols), encoded in JSON format.");
+                return hrm;
+            }
+
+            //Deserialize the body into an array of strings
+            string[] symbols = null;
+            try
+            {
+                symbols = JsonConvert.DeserializeObject<string[]>(content);
+            }
+            catch
+            {
+                HttpResponseMessage hrm = new HttpResponseMessage(HttpStatusCode.BadRequest);
+                hrm.Content = new StringContent("Fatal error while parsing request body to JSON string array.");
+                return hrm;
+            }
+            
+
+            //Set them up
+            HttpClient hc = new HttpClient();
+            List<Task<HttpResponseMessage>> Requests = new List<Task<HttpResponseMessage>>();
+            foreach (string s in symbols)
+            {
+                string url = "http://papertradesim.azurewebsites.net/api/StockStatisticalData?symbol=" + s.Trim().ToLower();
+                Requests.Add(hc.GetAsync(url));
+            }
+
+            //Wait for all responses
+            HttpResponseMessage[] responses = await Task.WhenAll(Requests);
+
+
+            //Parse into all
+            List<EquityStatisticalData> datas = new List<EquityStatisticalData>();
+            foreach (HttpResponseMessage hrm in responses)
+            {
+                if (hrm.StatusCode == HttpStatusCode.OK)
+                {
+                    try
+                    {
+                        string cont = await hrm.Content.ReadAsStringAsync();
+                        EquityStatisticalData esd = JsonConvert.DeserializeObject<EquityStatisticalData>(cont);
+                        datas.Add(esd);
+                    }
+                    catch
+                    {
+                        
+                    }
+                }
+            }
+
+
+
+            //return as Json
+            string as_json = JsonConvert.SerializeObject(datas.ToArray());
+            HttpResponseMessage rhrm = new HttpResponseMessage(HttpStatusCode.OK);
+            rhrm.Content = new StringContent(as_json, Encoding.UTF8, "application/json");
+            return rhrm;
+        }
+
+
     }
 }
