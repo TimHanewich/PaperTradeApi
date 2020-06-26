@@ -20,6 +20,188 @@ namespace PaperTradeApi
     {
         private const int Version = 7;
 
+        [FunctionName("StockData")]
+        public async static Task<HttpResponseMessage> GetStockData([HttpTrigger(AuthorizationLevel.Anonymous, "get")] HttpRequest req, ILogger log)
+        {
+            log.LogInformation("New request received");
+            string symbol = req.Query["symbol"];
+            if (symbol == null || symbol == "")
+            {
+                log.LogInformation("Parameter 'symbol' not present as part of request. Ending.");
+                HttpResponseMessage hrm = new HttpResponseMessage(HttpStatusCode.BadRequest);
+                hrm.Content = new StringContent("Fatal failure. Parameter 'symbol' not provided. You must provide a stock symbol to return data for.");
+                return hrm;
+            }
+            symbol = symbol.Trim().ToUpper();
+            log.LogInformation("Symbol requested: '" + symbol + "'");
+
+
+            //Summary data
+            bool SummaryData = false;
+            bool StatisticalData = false;
+            string SummaryData_String = req.Query["summary"];
+            string StatisticalData_String = req.Query["statistics"];
+            if (SummaryData_String != null)
+            {
+                if (SummaryData_String.ToLower() == "true")
+                {
+                    SummaryData = true;
+                }
+            }
+            if (StatisticalData_String != null)
+            {
+                if (StatisticalData_String.ToLower() == "true")
+                {
+                    StatisticalData = true;
+                }
+            }
+            
+            log.LogInformation("Summary request: " + SummaryData.ToString());
+            log.LogInformation("Statistics request: " + StatisticalData.ToString());
+
+            Equity e = Equity.Create(symbol);
+
+            //Try to download summary data (if wanted)
+            if (SummaryData)
+            {
+                try
+                {
+                    log.LogInformation("Downloading summary data...");
+                    await e.DownloadSummaryAsync();
+                }
+                catch
+                {
+                    HttpResponseMessage hrm = new HttpResponseMessage(HttpStatusCode.InternalServerError);
+                    hrm.Content = new StringContent("Fatal failure while downloading equity summary data.");
+                    return hrm;
+                }
+            }
+            
+            //Try to download statistical data (if wanted)
+            if (StatisticalData)
+            {
+                log.LogInformation("Downloading statistical data...");
+                try
+                {
+                    await e.DownloadStatisticsAsync();
+                }
+                catch
+                {
+                    HttpResponseMessage hrm = new HttpResponseMessage(HttpStatusCode.InternalServerError);
+                    hrm.Content = new StringContent("Fatal failure while downloading equity statistical data.");
+                    return hrm;
+                }
+            }
+
+
+            string ToReturnJson = JsonConvert.SerializeObject(e);
+            HttpResponseMessage ToReturn = new HttpResponseMessage(HttpStatusCode.OK);
+            ToReturn.Content = new StringContent(ToReturnJson, Encoding.UTF8, "application/json");
+            return ToReturn;
+
+        }
+
+        [FunctionName("MultipleStockData")]
+        public async static Task<HttpResponseMessage> GetMultipleStockData([HttpTrigger(AuthorizationLevel.Anonymous, "post")] HttpRequest req, ILogger log)
+        {
+
+            StreamReader sr = new StreamReader(req.Body);
+            string content = await sr.ReadToEndAsync();
+            log.LogInformation("Content: " + content);
+
+            //Check for blank
+            if (content == null || content == "")
+            {
+                HttpResponseMessage hrm = new HttpResponseMessage(HttpStatusCode.BadRequest);
+                hrm.Content = new StringContent("Your request body was blank. Please include a body of an array of strings (stock symbols), encoded in JSON format.");
+                return hrm;
+            }
+            
+
+            //Summary data
+            bool SummaryData = false;
+            bool StatisticalData = false;
+            string SummaryData_String = req.Query["summary"];
+            string StatisticalData_String = req.Query["statistics"];
+            if (SummaryData_String != null)
+            {
+                if (SummaryData_String.ToLower() == "true")
+                {
+                    SummaryData = true;
+                }
+            }
+            if (StatisticalData_String != null)
+            {
+                if (StatisticalData_String.ToLower() == "true")
+                {
+                    StatisticalData = true;
+                }
+            }
+            
+            log.LogInformation("Summary request: " + SummaryData.ToString());
+            log.LogInformation("Statistics request: " + StatisticalData.ToString());
+
+
+
+            //Deserialize the body into an array of strings
+            string[] symbols = null;
+            try
+            {
+                symbols = JsonConvert.DeserializeObject<string[]>(content);
+            }
+            catch
+            {
+                HttpResponseMessage hrm = new HttpResponseMessage(HttpStatusCode.BadRequest);
+                hrm.Content = new StringContent("Fatal error while parsing request body to JSON string array.");
+                return hrm;
+            }
+            log.LogInformation(symbols.Length.ToString() + " stock items found.");
+            
+
+            //Set them up
+            HttpClient hc = new HttpClient();
+            List<Task<HttpResponseMessage>> Requests = new List<Task<HttpResponseMessage>>();
+            foreach (string s in symbols)
+            {
+                string url = "http://papertradesim.azurewebsites.net/api/StockData?symbol=" + s.Trim().ToLower() + "&summary=" + SummaryData.ToString().ToLower() + "&statistics=" + StatisticalData.ToString().ToLower();
+                Requests.Add(hc.GetAsync(url));
+            }
+
+            //Wait for all responses
+            HttpResponseMessage[] responses = await Task.WhenAll(Requests);
+
+
+            //Parse into all
+            List<Equity> datas = new List<Equity>();
+            foreach (HttpResponseMessage hrm in responses)
+            {
+                if (hrm.StatusCode == HttpStatusCode.OK)
+                {
+                    try
+                    {
+                        string cont = await hrm.Content.ReadAsStringAsync();
+                        Equity e = JsonConvert.DeserializeObject<Equity>(cont);
+                        datas.Add(e);
+                    }
+                    catch
+                    {
+                        
+                    }
+                }
+            }
+
+
+
+            //return as Json
+            string as_json = JsonConvert.SerializeObject(datas.ToArray());
+            HttpResponseMessage rhrm = new HttpResponseMessage(HttpStatusCode.OK);
+            rhrm.Content = new StringContent(as_json, Encoding.UTF8, "application/json");
+            return rhrm;
+
+        }
+
+
+        #region "Archived"
         [FunctionName("StockSummaryData")]
         public async static Task<HttpResponseMessage> GetStockSummaryData([HttpTrigger(AuthorizationLevel.Anonymous, "get")] HttpRequest req, ILogger log)
         {
@@ -237,87 +419,8 @@ namespace PaperTradeApi
             return rhrm;
         }
 
+        #endregion
 
-        [FunctionName("StockData")]
-        public async static Task<HttpResponseMessage> GetStockData([HttpTrigger(AuthorizationLevel.Anonymous, "get")] HttpRequest req, ILogger log)
-        {
-            log.LogInformation("New request received");
-            string symbol = req.Query["symbol"];
-            if (symbol == null || symbol == "")
-            {
-                log.LogInformation("Parameter 'symbol' not present as part of request. Ending.");
-                HttpResponseMessage hrm = new HttpResponseMessage(HttpStatusCode.BadRequest);
-                hrm.Content = new StringContent("Fatal failure. Parameter 'symbol' not provided. You must provide a stock symbol to return data for.");
-                return hrm;
-            }
-            symbol = symbol.Trim().ToUpper();
-            log.LogInformation("Symbol requested: '" + symbol + "'");
-
-
-            //Summary data
-            bool SummaryData = false;
-            bool StatisticalData = false;
-            string SummaryData_String = req.Query["summary"];
-            string StatisticalData_String = req.Query["statistics"];
-            if (SummaryData_String != null)
-            {
-                if (SummaryData_String.ToLower() == "true")
-                {
-                    SummaryData = true;
-                }
-            }
-            if (StatisticalData_String != null)
-            {
-                if (StatisticalData_String.ToLower() == "true")
-                {
-                    StatisticalData = true;
-                }
-            }
-            
-            log.LogInformation("Summary request: " + SummaryData.ToString());
-            log.LogInformation("Statistics request: " + StatisticalData.ToString());
-
-            Equity e = Equity.Create(symbol);
-
-            //Try to download summary data (if wanted)
-            if (SummaryData)
-            {
-                try
-                {
-                    log.LogInformation("Downloading summary data...");
-                    await e.DownloadSummaryAsync();
-                }
-                catch
-                {
-                    HttpResponseMessage hrm = new HttpResponseMessage(HttpStatusCode.InternalServerError);
-                    hrm.Content = new StringContent("Fatal failure while downloading equity summary data.");
-                    return hrm;
-                }
-            }
-            
-            //Try to download statistical data (if wanted)
-            if (StatisticalData)
-            {
-                log.LogInformation("Downloading statistical data...");
-                try
-                {
-                    await e.DownloadStatisticsAsync();
-                }
-                catch
-                {
-                    HttpResponseMessage hrm = new HttpResponseMessage(HttpStatusCode.InternalServerError);
-                    hrm.Content = new StringContent("Fatal failure while downloading equity statistical data.");
-                    return hrm;
-                }
-            }
-
-
-            string ToReturnJson = JsonConvert.SerializeObject(e);
-            HttpResponseMessage ToReturn = new HttpResponseMessage(HttpStatusCode.OK);
-            ToReturn.Content = new StringContent(ToReturnJson, Encoding.UTF8, "application/json");
-            return ToReturn;
-
-        }
-
+        
     }
 }
