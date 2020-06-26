@@ -69,10 +69,10 @@ namespace PaperTradeApi
                     log.LogInformation("Downloading summary data...");
                     await e.DownloadSummaryAsync();
                 }
-                catch
+                catch (Exception ex)
                 {
                     HttpResponseMessage hrm = new HttpResponseMessage(HttpStatusCode.InternalServerError);
-                    hrm.Content = new StringContent("Fatal failure while downloading equity summary data.");
+                    hrm.Content = new StringContent("Fatal failure while downloading equity summary data. Message: " + ex.Message);
                     return hrm;
                 }
             }
@@ -85,10 +85,10 @@ namespace PaperTradeApi
                 {
                     await e.DownloadStatisticsAsync();
                 }
-                catch
+                catch (Exception ex)
                 {
                     HttpResponseMessage hrm = new HttpResponseMessage(HttpStatusCode.InternalServerError);
-                    hrm.Content = new StringContent("Fatal failure while downloading equity statistical data.");
+                    hrm.Content = new StringContent("Fatal failure while downloading equity statistical data. Message: " + ex.Message);
                     return hrm;
                 }
             }
