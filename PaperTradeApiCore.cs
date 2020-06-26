@@ -68,11 +68,14 @@ namespace PaperTradeApi
                 {
                     log.LogInformation("Downloading summary data...");
                     await e.DownloadSummaryAsync();
+                    log.LogInformation("Successfully downloaded summary data.");
                 }
                 catch (Exception ex)
                 {
+                    string error_message = "Fatal failure while downloading equity summary data. Message: " + ex.Message;
+                    log.LogError(error_message);
                     HttpResponseMessage hrm = new HttpResponseMessage(HttpStatusCode.InternalServerError);
-                    hrm.Content = new StringContent("Fatal failure while downloading equity summary data. Message: " + ex.Message);
+                    hrm.Content = new StringContent(error_message);
                     return hrm;
                 }
             }
@@ -84,19 +87,23 @@ namespace PaperTradeApi
                 try
                 {
                     await e.DownloadStatisticsAsync();
+                    log.LogInformation("Successfully downloaded statistics data.");
                 }
                 catch (Exception ex)
                 {
+                    string error_message = "Fatal failure while downloading equity statistical data. Message: " + ex.Message;
+                    log.LogError(error_message);
                     HttpResponseMessage hrm = new HttpResponseMessage(HttpStatusCode.InternalServerError);
-                    hrm.Content = new StringContent("Fatal failure while downloading equity statistical data. Message: " + ex.Message);
+                    hrm.Content = new StringContent(error_message);
                     return hrm;
                 }
             }
 
-
+            log.LogInformation("Converting to JSON...");
             string ToReturnJson = JsonConvert.SerializeObject(e);
             HttpResponseMessage ToReturn = new HttpResponseMessage(HttpStatusCode.OK);
             ToReturn.Content = new StringContent(ToReturnJson, Encoding.UTF8, "application/json");
+            log.LogInformation("Returning");
             return ToReturn;
 
         }
