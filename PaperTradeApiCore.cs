@@ -18,7 +18,7 @@ namespace PaperTradeApi
 {
     public static class PaperTradeApiCore
     {
-        private const int Version = 6;
+        private const int Version = 7;
 
         [FunctionName("StockSummaryData")]
         public async static Task<HttpResponseMessage> GetStockSummaryData([HttpTrigger(AuthorizationLevel.Anonymous, "get")] HttpRequest req, ILogger log)
@@ -237,7 +237,7 @@ namespace PaperTradeApi
             return rhrm;
         }
 
-        
+
         [FunctionName("StockData")]
         public async static Task<HttpResponseMessage> GetStockData([HttpTrigger(AuthorizationLevel.Anonymous, "get")] HttpRequest req, ILogger log)
         {
