@@ -237,6 +237,87 @@ namespace PaperTradeApi
             return rhrm;
         }
 
+        
+        [FunctionName("StockData")]
+        public async static Task<HttpResponseMessage> GetStockData([HttpTrigger(AuthorizationLevel.Anonymous, "get")] HttpRequest req, ILogger log)
+        {
+            log.LogInformation("New request received");
+            string symbol = req.Query["symbol"];
+            if (symbol == null || symbol == "")
+            {
+                log.LogInformation("Parameter 'symbol' not present as part of request. Ending.");
+                HttpResponseMessage hrm = new HttpResponseMessage(HttpStatusCode.BadRequest);
+                hrm.Content = new StringContent("Fatal failure. Parameter 'symbol' not provided. You must provide a stock symbol to return data for.");
+                return hrm;
+            }
+            symbol = symbol.Trim().ToUpper();
+            log.LogInformation("Symbol requested: '" + symbol + "'");
+
+
+            //Summary data
+            bool SummaryData = false;
+            bool StatisticalData = false;
+            string SummaryData_String = req.Query["summary"];
+            string StatisticalData_String = req.Query["statistics"];
+            if (SummaryData_String != null)
+            {
+                if (SummaryData_String.ToLower() == "true")
+                {
+                    SummaryData = true;
+                }
+            }
+            if (StatisticalData_String != null)
+            {
+                if (StatisticalData_String.ToLower() == "true")
+                {
+                    StatisticalData = true;
+                }
+            }
+            
+            log.LogInformation("Summary request: " + SummaryData.ToString());
+            log.LogInformation("Statistics request: " + StatisticalData.ToString());
+
+            Equity e = Equity.Create(symbol);
+
+            //Try to download summary data (if wanted)
+            if (SummaryData)
+            {
+                try
+                {
+                    log.LogInformation("Downloading summary data...");
+                    await e.DownloadSummaryAsync();
+                }
+                catch
+                {
+                    HttpResponseMessage hrm = new HttpResponseMessage(HttpStatusCode.InternalServerError);
+                    hrm.Content = new StringContent("Fatal failure while downloading equity summary data.");
+                    return hrm;
+                }
+            }
+            
+            //Try to download statistical data (if wanted)
+            if (StatisticalData)
+            {
+                log.LogInformation("Downloading statistical data...");
+                try
+                {
+                    await e.DownloadStatisticsAsync();
+                }
+                catch
+                {
+                    HttpResponseMessage hrm = new HttpResponseMessage(HttpStatusCode.InternalServerError);
+                    hrm.Content = new StringContent("Fatal failure while downloading equity statistical data.");
+                    return hrm;
+                }
+            }
+
+
+            string ToReturnJson = JsonConvert.SerializeObject(e);
+            HttpResponseMessage ToReturn = new HttpResponseMessage(HttpStatusCode.OK);
+            ToReturn.Content = new StringContent(ToReturnJson, Encoding.UTF8, "application/json");
+            return ToReturn;
+
+        }
 
     }
 }
