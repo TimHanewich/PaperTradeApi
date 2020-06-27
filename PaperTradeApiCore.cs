@@ -175,8 +175,10 @@ namespace PaperTradeApi
             //Summary data
             bool SummaryData = false;
             bool StatisticalData = false;
+            int TryCount = 1;
             string SummaryData_String = req.Query["summary"];
             string StatisticalData_String = req.Query["statistics"];
+            string TryCount_String = req.Query["trycount"];
             if (SummaryData_String != null)
             {
                 if (SummaryData_String.ToLower() == "true")
@@ -191,9 +193,28 @@ namespace PaperTradeApi
                     StatisticalData = true;
                 }
             }
+            if (TryCount_String != null)
+            {
+                if (TryCount_String != "")
+                {
+                    try
+                    {
+                        TryCount = Convert.ToInt32(TryCount_String);
+                    }
+                    catch
+                    {
+                        string errormsg = "Unable to convert TryCount '" + TryCount_String + "' to integer.";
+                        log.LogError(errormsg);
+                        HttpResponseMessage hrm = new HttpResponseMessage(HttpStatusCode.BadRequest);
+                        hrm.Content = new StringContent(errormsg);
+                        return hrm;
+                    }
+                }
+            }
             
             log.LogInformation("Summary request: " + SummaryData.ToString());
             log.LogInformation("Statistics request: " + StatisticalData.ToString());
+            log.LogInformation("Try count: " + TryCount.ToString());
 
 
 
@@ -209,7 +230,7 @@ namespace PaperTradeApi
                 hrm.Content = new StringContent("Fatal error while parsing request body to JSON string array.");
                 return hrm;
             }
-            log.LogInformation(symbols.Length.ToString() + " stock items found.");
+            log.LogInformation(symbols.Length.ToString() + " stock items found in request body.");
             
 
             //Set them up
@@ -217,11 +238,12 @@ namespace PaperTradeApi
             List<Task<HttpResponseMessage>> Requests = new List<Task<HttpResponseMessage>>();
             foreach (string s in symbols)
             {
-                string url = "http://papertradesim.azurewebsites.net/api/StockData?symbol=" + s.Trim().ToLower() + "&summary=" + SummaryData.ToString().ToLower() + "&statistics=" + StatisticalData.ToString().ToLower();
+                string url = "http://papertradesim.azurewebsites.net/api/StockData?symbol=" + s.Trim().ToLower() + "&summary=" + SummaryData.ToString().ToLower() + "&statistics=" + StatisticalData.ToString().ToLower() + "&trycount=" + TryCount.ToString();
                 Requests.Add(hc.GetAsync(url));
             }
 
             //Wait for all responses
+            log.LogInformation("Calling " + Requests.Count.ToString() + " requests...");
             HttpResponseMessage[] responses = await Task.WhenAll(Requests);
 
 
@@ -243,13 +265,16 @@ namespace PaperTradeApi
                     }
                 }
             }
+            log.LogInformation(datas.Count.ToString() + " requests have been parsed successfully.");
 
 
 
             //return as Json
+            log.LogInformation("Serializing to JSON...");
             string as_json = JsonConvert.SerializeObject(datas.ToArray());
             HttpResponseMessage rhrm = new HttpResponseMessage(HttpStatusCode.OK);
             rhrm.Content = new StringContent(as_json, Encoding.UTF8, "application/json");
+            log.LogInformation("Returning");
             return rhrm;
 
         }
